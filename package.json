@@ -1,0 +1,27 @@
+{
+  "name": "ostatki-nika-41",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome-расширение и веб-страница: прайс-лист .xls/.xlsx с остатками — поиск по любой части слова, живые фильтры, группировка, экспорт.",
+  "keywords": ["chrome-extension", "xls", "xlsx", "прайс-лист", "остатки", "search", "facets"],
+  "license": "MIT",
+  "scripts": {
+    "test": "node tools/test.mjs",
+    "bench": "node tools/bench.mjs 100000",
+    "demo": "node tools/make-demo.mjs",
+    "icons": "node tools/make-icons.mjs",
+    "vendor": "node tools/sync-vendor.mjs",
+    "build": "node tools/sync-vendor.mjs && node tools/make-demo.mjs && node tools/make-icons.mjs",
+    "serve": "python3 -m http.server 8080 --bind 0.0.0.0",
+    "package": "node tools/pack.mjs"
+  },
+  "dependencies": {
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.0"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

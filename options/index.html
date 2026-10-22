@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Остатки Ника 41 — настройки</title>
+<link rel="icon" href="../icons/icon-32.png">
+<link rel="stylesheet" href="../app/css/app.css">
+<style>
+  body { padding: 26px 16px 60px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 18px; box-shadow: var(--shadow); }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  p.lead { color: var(--txt-2); margin: 0 0 18px; font-size: 13px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+  .hot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .hot span { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; font: 11.5px var(--mono); background: var(--bg); }
+  #saved { color: var(--good); font-size: 12px; opacity: 0; transition: opacity .2s; }
+  #saved.on { opacity: 1; }
+  ul.tips { margin: 8px 0 0; padding-left: 20px; color: var(--txt-2); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Остатки Ника 41 — настройки</h1>
+  <p class="lead">Настройки общие для попапа и страницы прайса. Сохраняются локально в браузере, никуда не отправляются.</p>
+  <div class="card">
+    <div class="grid2">
+      <div class="field">
+        <label>Порог «мало»</label>
+        <input id="lowStock" type="number" min="0" step="1" value="5">
+        <span class="hint">остаток ≤ этого числа считается «мало»: жёлтая подсветка и отдельный фильтр</span>
+      </div>
+      <div class="field">
+        <label>Плотность строк</label>
+        <select id="density">
+          <option value="compact">Плотная (30 px)</option>
+          <option value="comfortable">Просторная (40 px)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Вид по умолчанию</label>
+        <select id="view">
+          <option value="table">Позиции (строка = позиция прайса)</option>
+          <option value="groups">Спецификации (свод по номенклатуре)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Тема</label>
+        <select id="theme">
+          <option value="auto">как в системе</option>
+          <option value="light">светлая</option>
+          <option value="dark">тёмная</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Автообновление файла</label>
+        <select id="autoMin">
+          <option value="0">выключено</option>
+          <option value="5">каждые 5 минут</option>
+          <option value="10">каждые 10 минут</option>
+          <option value="15">каждые 15 минут</option>
+          <option value="30">каждые 30 минут</option>
+          <option value="60">каждый час</option>
+        </select>
+        <span class="hint">работает, если файл выбран кнопкой «Импорт XLS» (Chrome запоминает доступ)</span>
+      </div>
+      <div class="field">
+        <label>Значений цвета в фильтре</label>
+        <input id="colorLimit" type="number" min="5" max="500" value="28">
+        <span class="hint">дальше — кнопка «показать все»</span>
+      </div>
+    </div>
+    <label class="chk" style="margin-top:14px"><input type="checkbox" id="reuseConfig" checked> Помнить разбивку по колонкам при обновлении того же файла</label>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:16px">
+      <button class="btn btn-primary" id="save">Сохранить</button>
+      <button class="btn" id="open">Открыть страницу прайса</button>
+      <button class="btn" id="wipe">Очистить сохранённые прайсы</button>
+      <span id="saved">Сохранено ✓</span>
+    </div>
+    <div class="sectitle">Горячие клавиши на странице прайса</div>
+    <div class="hot">
+      <span>/ — фокус на поиск</span><span>Ctrl+F — поиск</span><span>Esc — сброс/закрыть</span>
+      <span>↑ ↓ — строки</span><span>Alt+R — перечитать файл</span><span>Alt+S — фильтры</span>
+      <span>Alt+Shift+O — открыть прайс</span><span>Alt+Shift+F — прайс и поиск</span>
+    </div>
+    <div class="sectitle">Что понимает импорт</div>
+    <ul class="tips">
+      <li>.xls (Excel 97–2003), .xlsx, .xlsm, .xlsb, .csv, .txt, .ods — читаются локально, без загрузки на сервер</li>
+      <li>шапка может быть не в первой строке: «Прайс-лист ООО…», дата, потом заголовки — приложение найдёт нужную строку</li>
+      <li>колонки определяются по названиям и по содержимому; при сомнениях открывается окно «Настроить колонки»</li>
+      <li>строки «ИТОГО / ВСЕГО» и повтор шапки на каждой странице исключаются из данных автоматически</li>
+      <li>остаток «1 234,5», «12 шт.», «нет», «-» понимается как число</li>
+    </ul>
+  </div>
+</div>
+<script src="../app/js/util.js"></script>
+<script src="../app/js/store.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Проверки (парсер, поиск, фасеты, страница в jsdom, манифест)
+        run: node tools/test.mjs
+      - name: Сборка не сломана (zip + детерминированные демо/иконки)
+        run: |
+          npm run package
+          node tools/make-demo.mjs
+          node tools/make-icons.mjs
+          git diff --exit-code demo/demo-data.js || echo "demo сгенерирован заново"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: dist/ostatki-nika-41-*.zip

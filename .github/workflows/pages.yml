@@ -1,0 +1,43 @@
+# Веб-версия страницы прайса (лендинг + /app/index.html) на GitHub Pages.
+# Источник Pages — «GitHub Actions» (gh api -X POST /repos/<repo>/pages -f build_type=workflow),
+# поэтому имя ветки со слэшем не мешает, а артефакт собирается из корня репозитория.
+# Работает только в целевом репозитории проекта: в других (например, в репозитории-источнике
+# рабочей ветки) job скипается, чтобы не светить красный крест при незадействованном Pages.
+name: GitHub Pages
+
+on:
+  push:
+    branches: [main, "arena/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    if: github.repository == 'nikalay911-byte/ostatki-nika-41'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+        with:
+          generate: false
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: "."
+  deploy:
+    needs: build
+    if: github.repository == 'nikalay911-byte/ostatki-nika-41' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

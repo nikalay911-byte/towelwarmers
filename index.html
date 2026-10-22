@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Остатки Ника 41 — прайс-лист из Excel со складскими остатками</title>
+<meta name="description" content="Chrome-расширение и веб-страница: прайс-лист .xls/.xlsx превращается в удобный каталог с поиском по любой части слова, живыми фильтрами по цвету и остаткам, группировкой по номенклатуре и экспортом.">
+<link rel="icon" href="icons/icon-32.png">
+<link rel="stylesheet" href="app/css/app.css">
+<style>
+  body { margin: 0; padding: 0; }
+  .hero { max-width: 1040px; margin: 0 auto; padding: 46px 20px 18px; }
+  .hero h1 { font-size: 34px; line-height: 1.15; margin: 0 0 12px; letter-spacing: -.8px; }
+  .hero h1 span { color: var(--accent); }
+  .hero p.lead { font-size: 16px; color: var(--txt-2); max-width: 720px; margin: 0 0 22px; }
+  .cta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .cta .btn { padding: 11px 18px; font-size: 14px; }
+  .cta a.btn { text-decoration: none; display: inline-block; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 14px; max-width: 1040px; margin: 0 auto; padding: 18px 20px 40px; }
+  .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .card h3 { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .card h3 i { font-style: normal; width: 22px; height: 22px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 12px; }
+  .card p { margin: 0; color: var(--txt-2); font-size: 12.5px; }
+  .card code, .hero code { font: 12px var(--mono); background: var(--bg-3); border-radius: 4px; padding: 1px 5px; }
+  .steps { max-width: 1040px; margin: 0 auto; padding: 0 20px 46px; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .steps ol { margin: 0; padding-left: 20px; color: var(--txt-2); font-size: 12.5px; }
+  .steps b { color: var(--txt); display: block; margin-bottom: 4px; font-size: 13px; }
+  footer { border-top: 1px solid var(--line); padding: 14px 20px 30px; text-align: center; color: var(--txt-3); font-size: 12px; }
+  .mock { max-width: 1040px; margin: 0 auto 10px; padding: 0 20px; }
+  .mock div { border: 1px solid var(--line); border-radius: 12px 12px 0 0; border-bottom: 0; background: var(--bg-2); padding: 10px 12px; display: flex; gap: 8px; align-items: center; }
+  .mock div + div { border-radius: 0; border-top: 1px dashed var(--line-2); font-size: 12px; color: var(--txt-2); }
+  .mock .f { flex: 1; border: 1px solid var(--line); border-radius: 7px; padding: 5px 9px; background: var(--bg); }
+  .mock em { font-style: normal; background: var(--mark); border-radius: 3px; padding: 0 2px; }
+  .mock s { text-decoration: none; margin-left: auto; font-weight: 700; color: var(--good); }
+</style>
+</head>
+<body>
+<section class="hero">
+  <h1>Прайс из <span>.xls</span> — удобно, с&nbsp;поиском и&nbsp;фильтрами</h1>
+  <p class="lead">
+    «Остатки Ника&nbsp;41» превращает складской прайс-лист (Номенклатура · Характеристика/цвет · Остаток)
+    в быструю страницу с поиском по любой части слова, живыми фильтрами и группировкой по позициям.
+    Расширение для Chrome + обычная веб-страница. Файлы никуда не загружаются — всё считается локально.
+  </p>
+  <div class="cta">
+    <a class="btn btn-primary" href="app/index.html">Открыть страницу прайса</a>
+    <a class="btn" href="https://github.com/nikalay911-byte/ostatki-nika-41" rel="noreferrer">Как установить в Chrome</a>
+    <a class="btn" href="demo/price-demo.xls" download>Скачать демо-прайс (.xls)</a>
+  </div>
+</section>
+
+<div class="mock">
+  <div><span class="f">поиск: <b>суш 480</b> ‑хром</span><span class="btn">Импорт XLS</span><span class="btn">Экспорт</span></div>
+  <div>Полотенцесушитель <em>Ника</em> <em>480</em>×320 белый · водяной <s>2 360</s></div>
+  <div>Полотенцесушитель <em>Ника</em> <em>480</em>×320 графит · комбинированный <s>18</s></div>
+  <div>Полотенцесушитель <em>Ника</em> <em>480</em>×320 бежевый · водяной <s style="color:var(--bad)">нет</s></div>
+</div>
+
+<section class="cols">
+  <div class="card"><h3><i>1</i>Импорт</h3><p>.xls (97–2003), .xlsx, .xlsm, .xlsb, .csv, .ods — перетаскиванием или кнопкой. Шапку и колонки приложение находит само, при сомнениях предлагает сверить в окне «Настроить колонки». Строки «ИТОГО» и повтор шапки отсекаются.</p></div>
+  <div class="card"><h3><i>2</i>Поиск</h3><p>По любой части слова и по любой колонке сразу, без учёта регистра и ё/е, «ника полка» = оба слова, <code>-хром</code> = исключить, а <code>ybrf</code> найдёт «ника» — если забыли переключить раскладку.</p></div>
+  <div class="card"><h3><i>3</i>Живые фильтры</h3><p>Наличие, цвет со свотчами, склад, диапазон остатка и цены. Счётчики пересчитываются с учётом остальных фильтров, поэтому ни один вариант не «сваливается» в ноль.</p></div>
+  <div class="card"><h3><i>4</i>Остатки</h3><p>Порог «мало» настраивается, «нет» и «минус» подсвечиваются. Режим «Спецификации» сводит цвета в одну позицию и показывает суммарный остаток.</p></div>
+  <div class="card"><h3><i>5</i>Без сервера</h3><p>Данные живут в IndexedDB браузера: страница открывается по ярлыку расширения или по <code>Alt+Shift+O</code> и помнит последний прайс. Интернет нужен только чтобы открыть сам файл.</p></div>
+  <div class="card"><h3><i>6</i>Обновление и выгрузка</h3><p>Кнопка «↻ Обновить» перечитывает тот же файл (и умеет делать это по расписанию), а «Экспорт» отдаёт отфильтрованное в XLSX/CSV/TSV/JSON или в буфер обмена.</p></div>
+</section>
+
+<section class="steps">
+  <div><b>Как установить расширение</b>
+    <ol>
+      <li>Скачать/склонировать репозиторий</li>
+      <li><code>chrome://extensions</code> → режим разработчика</li>
+      <li>«Загрузить распакованное расширение» → папка репозитория</li>
+    </ol>
+  </div>
+  <div><b>Как пользоваться без расширения</b>
+    <ol>
+      <li>Открыть <code>app/index.html</code> (двойным кликом или на GitHub Pages)</li>
+      <li>Перетащить прайс на страницу</li>
+      <li>Сохранить ссылку с фильтрами — она открывает ту же выборку</li>
+    </ol>
+  </div>
+  <div><b>Что нужно от файла</b>
+    <ol>
+      <li>Колонки: Номенклатура, Характеристика (цвет), Остаток</li>
+      <li>Порядок и названия — любые, определяются автоматически</li>
+      <li>Доп. колонки (артикул, цена, склад) тоже подхватываются</li>
+    </ol>
+  </div>
+</section>
+
+<footer>
+  Остатки Ника 41 · Manifest V3 · SheetJS для чтения Excel · данные не покидают компьютер ·
+  <a href="app/index.html">прайс</a> · <a href="options/index.html">настройки</a>
+</footer>
+</body>
+</html>

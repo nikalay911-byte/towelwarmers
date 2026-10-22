@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Остатки Ника 41</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<header class="ph">
+  <span class="pm" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 3a7 7 0 1 1-4.2 12.6l-3.4 3.4-1.4-1.4 3.4-3.4A7 7 0 0 1 10 3Zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z"/></svg></span>
+  <b>Остатки&nbsp;Ника&nbsp;41</b>
+  <span id="state" class="state">—</span>
+</header>
+
+<div class="pw">
+  <input id="pq" type="search" placeholder="Поиск по прайсу…" autocomplete="off" spellcheck="false">
+</div>
+
+<div id="stats" class="stats"></div>
+<ul id="res" class="res"></ul>
+<div id="hint" class="hint">Нажмите на строку, чтобы открыть её в полном прайсе.</div>
+
+<footer class="pf">
+  <button id="open" class="btn btn-primary">Открыть прайс</button>
+  <button id="import" class="btn">Импорт XLS</button>
+  <button id="refresh" class="btn" hidden>↻</button>
+</footer>
+
+<script src="../vendor/xlsx.full.min.js"></script>
+<script src="../app/js/util.js"></script>
+<script src="../app/js/filters.js"></script>
+<script src="../app/js/store.js"></script>
+<script src="../app/js/fs.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>
