@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Монитор цен</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+<header><img src="../icons/icon-32.png" width="18" height="18" alt=""><b>Монитор цен конкурентов</b></header>
+<div id="state" class="state">—</div>
+<div id="progress" class="bar" hidden><i></i></div>
+<ul id="dump" class="dump"></ul>
+<footer>
+  <button id="start" class="btn primary">▶ Старт</button>
+  <button id="pause" class="btn" hidden>⏸ Пауза</button>
+  <button id="resume" class="btn primary" hidden>▶ Продолжить</button>
+  <span class="grow"></span>
+  <button id="open" class="btn">Открыть панель</button>
+</footer>
+<script src="../lib/core.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

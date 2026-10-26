@@ -3,7 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "description": "Chrome-расширение и веб-страница: прайс-лист .xls/.xlsx с остатками — поиск по любой части слова, живые фильтры, группировка, экспорт.",
-  "keywords": ["chrome-extension", "xls", "xlsx", "прайс-лист", "остатки", "search", "facets"],
+  "keywords": [
+    "chrome-extension",
+    "xls",
+    "xlsx",
+    "прайс-лист",
+    "остатки",
+    "search",
+    "facets"
+  ],
   "license": "MIT",
   "scripts": {
     "test": "node tools/test.mjs",
@@ -13,7 +21,10 @@
     "vendor": "node tools/sync-vendor.mjs",
     "build": "node tools/sync-vendor.mjs && node tools/make-demo.mjs && node tools/make-icons.mjs",
     "serve": "python3 -m http.server 8080 --bind 0.0.0.0",
-    "package": "node tools/pack.mjs"
+    "package": "node tools/pack.mjs",
+    "monitor:test": "node price-monitor/test/test.mjs",
+    "monitor:package": "node price-monitor/tools/pack.mjs",
+    "monitor:icons": "node price-monitor/tools/make-icons.mjs"
   },
   "dependencies": {
     "xlsx": "0.18.5"

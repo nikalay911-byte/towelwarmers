@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Монитор цен конкурентов",
+  "short_name": "Монитор цен",
+  "version": "1.0.0",
+  "minimum_chrome_version": "116",
+  "description": "Проверяет цены наших позиций у конкурентов по одной ссылке за раз с большими паузами (5–10 мин), считает отклонение от РРЦ и отмечает демпинг.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Монитор цен конкурентов",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "dashboard/index.html",
+  "permissions": ["storage", "alarms", "scripting", "notifications"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
