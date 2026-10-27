@@ -12,6 +12,9 @@
 Разница = `((цена конкурента − наша цена) / наша цена) × 100`. Цена ниже нашей → «Да»
 (порог можно задать в настройках). Таблица выгружается в CSV, который открывается в Excel.
 
+> **Без Chrome — в Google Colab:** Python-версия с тем же отчётом лежит в [`colab/`](colab/README.md):
+> [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nikalay911-byte/towelwarmers/blob/main/price-monitor/colab/price_monitor.ipynb)
+
 Установка
 ---------
 1. `chrome://extensions/` → включить **Режим разработчика**.

@@ -10,3 +10,6 @@ Thumbs.db
 *.crx
 *.pem
 .cache/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
