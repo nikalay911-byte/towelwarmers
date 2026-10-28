@@ -17,6 +17,17 @@ jobs:
       - run: npm ci
       - name: Проверки (парсер, поиск, фасеты, страница в jsdom, манифест)
         run: node tools/test.mjs
+      - name: Монитор цен конкурентов — тесты и сборка
+        run: |
+          node price-monitor/test/test.mjs
+          node price-monitor/tools/pack.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Монитор цен — Python/Colab
+        run: |
+          pip install -q requests beautifulsoup4 lxml pandas openpyxl jinja2
+          python -m unittest price-monitor/colab/test_pricemon.py
       - name: Сборка не сломана (zip + детерминированные демо/иконки)
         run: |
           npm run package
@@ -26,4 +37,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: extension
-          path: dist/ostatki-nika-41-*.zip
+          path: |
+            dist/ostatki-nika-41-*.zip
+            dist/price-monitor-*.zip

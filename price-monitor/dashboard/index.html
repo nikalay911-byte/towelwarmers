@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Монитор цен конкурентов</title>
+<link rel="icon" href="../icons/icon-32.png">
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><img src="../icons/icon-32.png" alt="" width="24" height="24"><b>Монитор цен конкурентов</b></div>
+  <div id="status" class="status">—</div>
+  <div class="controls">
+    <button id="btnStart" class="btn primary">▶ Старт</button>
+    <button id="btnPause" class="btn" hidden>⏸ Пауза</button>
+    <button id="btnResume" class="btn primary" hidden>▶ Продолжить</button>
+    <button id="btnStop" class="btn" hidden>■ Стоп</button>
+  </div>
+</header>
+
+<div id="permWarn" class="banner warn" hidden>
+  <span id="permText"></span>
+  <button id="btnPerm" class="btn primary">Выдать доступ к сайтам</button>
+</div>
+
+<nav class="tabs" role="tablist">
+  <a href="#results" data-tab="results" class="tab">Результаты</a>
+  <a href="#positions" data-tab="positions" class="tab">Позиции и ссылки</a>
+  <a href="#settings" data-tab="settings" class="tab">Настройки</a>
+  <a href="#log" data-tab="log" class="tab">Журнал</a>
+</nav>
+
+<main>
+  <!-- ===================== Результаты ===================== -->
+  <section id="tab-results" class="panel">
+    <div class="toolbar">
+      <div id="summary" class="summary"></div>
+      <span class="grow"></span>
+      <label class="chk"><input type="checkbox" id="onlyDump"> только демпинг</label>
+      <button id="btnCsv" class="btn">⬇ Экспорт CSV (Excel)</button>
+    </div>
+    <div id="pauses" class="banner info" hidden></div>
+    <div id="results"></div>
+  </section>
+
+  <!-- ===================== Позиции ===================== -->
+  <section id="tab-positions" class="panel" hidden>
+    <div class="toolbar">
+      <button id="btnAddPos" class="btn">+ Позиция</button>
+      <button id="btnImport" class="btn">Импорт из Excel / CSV…</button>
+      <button id="btnFeed" class="btn">Импорт из XML-фида…</button>
+      <button id="btnExportPos" class="btn">⬇ Выгрузить позиции</button>
+      <button id="btnSample" class="btn ghost" title="Добавить 4 позиции из отчёта с найденными ссылками">Загрузить пример (4 позиции Comfysan)</button>
+      <span class="grow"></span>
+      <span id="dirty" class="dirty" hidden>есть несохранённые изменения</span>
+      <button id="btnSavePos" class="btn primary">Сохранить</button>
+    </div>
+    <p class="hint">Ссылки — по одной на строку. Формат строки: <code>URL</code>, при необходимости через « | » —
+      <code>якорь</code> (артикул или кусок названия, если по ссылке список товаров, а не карточка) и <code>CSS-селектор цены</code>
+      (если цена не находится сама). Строку можно отключить, поставив в начале <code>#</code>.</p>
+    <div id="posList"></div>
+  </section>
+
+  <!-- ===================== Настройки ===================== -->
+  <section id="tab-settings" class="panel" hidden>
+    <form id="settingsForm" class="settings">
+      <fieldset>
+        <legend>Темп проверки</legend>
+        <label>Пауза между проверками, мин: от <input type="number" name="minDelayMin" min="1" step="1"> до <input type="number" name="maxDelayMin" min="1" step="1"></label>
+        <p class="hint">Пауза каждый раз случайная внутри диапазона. За раз открывается одна страница.</p>
+        <label>Один и тот же сайт — не чаще чем раз в <input type="number" name="domainGapMin" min="0" step="5"> мин</label>
+        <label>Повторять круг каждые <input type="number" name="repeatHours" min="0" step="1"> ч <span class="hint">(0 — только вручную)</span></label>
+        <p id="estimate" class="hint"></p>
+      </fieldset>
+      <fieldset>
+        <legend>Открытие страниц</legend>
+        <label><input type="radio" name="openMode" value="window"> в свёрнутом окне (не мешает работать)</label>
+        <label><input type="radio" name="openMode" value="tab"> в фоновой вкладке текущего окна</label>
+        <label>Ждать загрузку не дольше <input type="number" name="pageTimeoutSec" min="10" step="5"> с, после загрузки — ещё
+          <input type="number" name="renderWaitMinSec" min="0" step="1">–<input type="number" name="renderWaitMaxSec" min="0" step="1"> с</label>
+      </fieldset>
+      <fieldset>
+        <legend>Защита от ботов</legend>
+        <label>Если сайт показал капчу или «слишком много запросов» — пауза по сайту <input type="number" name="blockBackoffHours" min="1" step="1"> ч (при повторе ×2)</label>
+        <p class="hint">Капчи и Cloudflare расширение не обходит: такой сайт откладывается, его ссылки переносятся на следующий круг.</p>
+        <button type="button" id="btnResetPauses" class="btn">Сбросить паузы по сайтам</button>
+      </fieldset>
+      <fieldset>
+        <legend>Отчёт</legend>
+        <label>Считать демпингом цену ниже нашей больше чем на <input type="number" name="dumpThresholdPct" min="0" step="0.5"> %</label>
+        <label><input type="checkbox" name="notify"> уведомлять о новом демпинге и о завершении круга</label>
+        <label class="col">Не проверять домены (через пробел или запятую)
+          <textarea name="excludedDomains" rows="2" spellcheck="false"></textarea></label>
+      </fieldset>
+      <div class="toolbar"><span id="setSaved" class="saved" hidden>Сохранено</span><span class="grow"></span><button class="btn primary" type="submit">Сохранить настройки</button></div>
+    </form>
+  </section>
+
+  <!-- ===================== Журнал ===================== -->
+  <section id="tab-log" class="panel" hidden>
+    <div class="toolbar"><span class="grow"></span><button id="btnClearLog" class="btn">Очистить журнал</button></div>
+    <ol id="log" class="log"></ol>
+  </section>
+</main>
+
+<dialog id="importDlg">
+  <form method="dialog" class="dlg">
+    <h3>Импорт позиций</h3>
+    <p class="hint">Скопируйте строки из Excel и вставьте сюда (или выберите CSV-файл). Колонки:
+      <b>Наименование · Артикул · Наша цена · Ссылка</b> [· Якорь · CSS-селектор]. Шапка не обязательна.
+      Строки с одинаковым артикулом объединяются в одну позицию; по одной ссылке на строку.</p>
+    <textarea id="importText" rows="12" spellcheck="false" placeholder="Comfysan Альто-К EC-3 120/12, оружейная сталь, гальваника	018160	27900	https://www.santehtop.ru/comfysan-alto-k-018160/"></textarea>
+    <div class="toolbar">
+      <input type="file" id="importFile" accept=".csv,.tsv,.txt">
+      <span class="grow"></span>
+      <label class="chk"><input type="checkbox" id="importReplace"> заменить текущий список</label>
+      <button value="cancel" class="btn">Отмена</button>
+      <button id="importGo" value="ok" class="btn primary">Импортировать</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="feedDlg">
+  <form method="dialog" class="dlg feed">
+    <h3>Импорт позиций из XML-фида каталога</h3>
+    <p class="hint">YML (Яндекс.Маркет, выгрузка Bitrix <code>/bitrix/catalog_export/…xml</code>) или Google Merchant.
+      Из фида берутся <b>наименование, артикул и наша цена</b>, ссылки на конкурентов строятся по шаблонам ниже.
+      Позиции с тем же артикулом обновляются (цена из фида), ручные ссылки сохраняются.</p>
+    <div class="row">
+      <input id="feedUrl" type="url" class="grow" placeholder="https://…/catalog_export/….xml">
+      <button type="button" id="feedLoad" class="btn primary">Загрузить по ссылке</button>
+      <label class="btn file">Файл…<input type="file" id="feedFile" accept=".xml,.yml,text/xml,application/xml" hidden></label>
+    </div>
+    <div class="grid">
+      <label>Фильтр (слова через пробел, <code>-слово</code> — исключить)<input id="feedFilter" placeholder="полотенцесушитель электрический -ЭК"></label>
+      <label>Бренд для {brand}/{series}<input id="feedBrand" placeholder="Comfysan"></label>
+      <label>Наша цена из<select id="feedPrice"><option value="price">price (текущая)</option><option value="oldprice">oldprice (если есть)</option><option value="max">большая из двух</option></select></label>
+      <label>Не больше позиций (0 — все)<input id="feedLimit" type="number" min="0" step="1"></label>
+      <label class="chk"><input type="checkbox" id="feedAvail"> только «в наличии» (available=true)</label>
+    </div>
+    <label class="tpl">Шаблоны ссылок конкурентов — по одному на строку: <code>URL | якорь</code>.
+      Подстановки <code>{article}</code> <code>{series}</code> <code>{brand}</code> <code>{name}</code>; строка с <code>#</code> — отключена.
+      <textarea id="feedTpl" rows="4" spellcheck="false"></textarea></label>
+    <div id="feedInfo" class="banner info">Загрузите фид по ссылке или выберите файл.</div>
+    <div id="feedPreview" class="feed-preview"></div>
+    <div class="toolbar">
+      <label class="chk"><input type="checkbox" id="feedReplace"> заменить текущий список</label>
+      <span class="grow"></span>
+      <button value="cancel" class="btn">Отмена</button>
+      <button id="feedGo" value="ok" class="btn primary" disabled>Добавить позиции</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="../lib/core.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
