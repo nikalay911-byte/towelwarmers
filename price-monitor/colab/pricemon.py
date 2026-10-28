@@ -26,7 +26,7 @@ from datetime import datetime
 from typing import Callable, Iterable, Optional
 from urllib.parse import urlparse
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # --------------------------------------------------------------------------------------------
 # Настройки
@@ -248,7 +248,7 @@ def positions_from_rows(rows: list) -> list:
 
 
 def load_positions(source) -> list:
-    """CSV/TSV-текст, путь к .csv/.xlsx/.xls или pandas.DataFrame."""
+    """CSV/TSV-текст, путь к .csv/.xlsx/.xls, XML-фид (.xml/.yml или текст) или pandas.DataFrame."""
     try:
         import pandas as pd  # noqa: F401
     except ImportError:  # pragma: no cover
@@ -256,6 +256,8 @@ def load_positions(source) -> list:
     if pd is not None and hasattr(source, "values") and hasattr(source, "columns"):
         return positions_from_rows([list(map(str, source.columns))] + source.astype(str).values.tolist())
     s = str(source)
+    if ("\n" not in s and re.search(r"\.(xml|yml)$", s, re.I)) or s.lstrip("\ufeff \r\n").startswith("<"):
+        return positions_from_feed(load_feed(s))
     if "\n" not in s and re.search(r"\.(xlsx|xlsm|xls)$", s, re.I):
         df = pd.read_excel(s, header=None, dtype=str).fillna("")
         return positions_from_rows(df.values.tolist())
@@ -278,6 +280,287 @@ def positions_to_csv(positions: list) -> str:
             w.writerow([p.name, p.article, int(p.our_price) if p.our_price else "",
                         ("" if l.enabled else "# ") + l.url, l.anchor, l.selector])
     return "\ufeff" + buf.getvalue()
+
+
+# --------------------------------------------------------------------------------------------
+# XML-фид каталога (YML / Яндекс.Маркет — выгрузка Bitrix, Google Merchant RSS/Atom)
+# --------------------------------------------------------------------------------------------
+DEFAULT_FEED_URL = "https://sancomfgroup.ru/bitrix/catalog_export/cmfsn_2CFg.xml"
+# Шаблоны ссылок конкурентов: «URL [| якорь]». Подстановки: {article} {series} {brand} {name}.
+DEFAULT_LINK_TEMPLATES = [
+    "https://www.santehtop.ru/{brand}-{series}-{article}/",
+    "https://santehpremium.ru/search/?q={article} | {article}",
+]
+_ART_PARAM_RE = re.compile(r"^(артикул|арт\.?|код производителя|артикул производителя|vendor ?code|sku|mpn)$", re.I)
+_TR = dict(zip("абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+               ["a", "b", "v", "g", "d", "e", "e", "zh", "z", "i", "y", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u",
+                "f", "h", "ts", "ch", "sh", "sch", "", "y", "", "e", "yu", "ya"]))
+
+
+@dataclass
+class Offer:
+    id: str = ""
+    name: str = ""
+    article: str = ""
+    price: Optional[float] = None
+    old_price: Optional[float] = None
+    url: str = ""
+    vendor: str = ""
+    category: str = ""
+    available: Optional[bool] = None
+    currency: str = ""
+    params: dict = field(default_factory=dict)
+
+
+def _local(tag) -> str:
+    return tag.rsplit("}", 1)[-1].rsplit(":", 1)[-1].lower() if isinstance(tag, str) else ""
+
+
+def _xml_root(data: bytes):
+    import xml.etree.ElementTree as ET
+    try:
+        return ET.fromstring(data)
+    except ET.ParseError:
+        from lxml import etree  # битый XML (неэкранированный &) — lxml с recover
+        return etree.fromstring(data, parser=etree.XMLParser(recover=True, huge_tree=True, resolve_entities=False))
+
+
+def _txt(el) -> str:
+    return re.sub(r"\s+", " ", "".join(el.itertext())).strip() if el is not None else ""
+
+
+def parse_feed(data) -> dict:
+    """bytes/str XML → {'format', 'shop', 'offers': [Offer], 'categories': n}.
+    Артикул: vendorCode → <param name="Артикул"> → g:mpn / sku → 6 цифр в названии или URL → id предложения."""
+    if isinstance(data, str):
+        data = re.sub(r"^\s*<\?xml[^>]*\?>", "", data.lstrip("\ufeff"), count=1).encode("utf-8")
+    root = _xml_root(data)
+    rtag = _local(root.tag)
+    cats, parents = {}, {}
+    for el in root.iter():
+        if _local(el.tag) == "category" and el.get("id"):
+            cats[el.get("id")] = _txt(el)
+            if el.get("parentId"):
+                parents[el.get("id")] = el.get("parentId")
+
+    def cat_path(cid):
+        out, guard = [], 0
+        while cid and cid in cats and guard < 20:
+            out.insert(0, cats[cid])
+            cid, guard = parents.get(cid), guard + 1
+        return " / ".join(out)
+
+    items = [el for el in root.iter() if _local(el.tag) == "offer"]
+    fmt = "yml" if items or rtag == "yml_catalog" else ("rss" if rtag == "rss" else ("atom" if rtag == "feed" else "unknown"))
+    if not items:
+        items = [el for el in root.iter() if _local(el.tag) in ("item", "entry")]
+    shop = ""
+    for el in root.iter():
+        if _local(el.tag) in ("shop", "channel"):
+            for ch in el:
+                if _local(ch.tag) in ("name", "title"):
+                    shop = _txt(ch)
+                    break
+            break
+        if fmt == "atom" and _local(el.tag) == "title":
+            shop = _txt(el)
+            break
+
+    offers = []
+    for it in items:
+        kids = {}
+        params = {}
+        link_href = ""
+        for ch in it:
+            t = _local(ch.tag)
+            if t == "param" and ch.get("name"):
+                params[ch.get("name").strip()] = _txt(ch)
+            elif t == "link" and ch.get("href"):
+                link_href = ch.get("href")
+            elif t not in kids and _txt(ch):
+                kids[t] = _txt(ch)
+
+        def g(*names):
+            for n in names:
+                if kids.get(n.lower()):
+                    return kids[n.lower()]
+            return ""
+
+        name = g("name", "title") or " ".join(x for x in (g("typePrefix"), g("vendor"), g("model")) if x)
+        url = g("url", "link") or link_href
+        article = g("vendorCode")
+        if not article:
+            article = next((v for k, v in params.items() if _ART_PARAM_RE.match(k) and v), "")
+        article = article or g("mpn", "sku", "article")
+        if not article:
+            m = re.search(r"(?<!\d)(\d{6})(?!\d)", name) or re.search(r"(?<!\d)(\d{6})(?!\d)", url)
+            article = m.group(1) if m else ""
+        oid = it.get("id") or g("id")
+        article = article or oid or ""
+        avail_raw = it.get("available") if it.get("available") is not None else g("availability", "available")
+        available = None if avail_raw in (None, "") else bool(re.match(r"^(true|1|yes|in[ _]stock|в наличии)$", avail_raw, re.I))
+        cid = g("categoryId")
+        offers.append(Offer(
+            id=oid or "", name=name, article=article.strip(),
+            price=parse_price(g("price"), lo=1), old_price=parse_price(g("oldprice", "sale_price_old"), lo=1),
+            url=url, vendor=g("vendor", "brand"),
+            category=(cat_path(cid) or cid) if cid else g("product_type", "google_product_category"),
+            available=available, currency=g("currencyId", "currency"), params=params))
+    return {"format": fmt, "shop": shop, "offers": offers, "categories": len(cats)}
+
+
+def load_feed(source, settings: Settings = None, timeout: float = 60) -> dict:
+    """URL, путь к файлу, bytes или str → parse_feed(...)."""
+    if isinstance(source, (bytes, bytearray)):
+        return parse_feed(bytes(source))
+    s = str(source)
+    if re.match(r"^https?://", s, re.I):
+        import requests
+        st = (settings or Settings()).normalized()
+        r = requests.get(s, timeout=timeout, headers={"User-Agent": st.user_agent, "Accept": "application/xml,text/xml,*/*"})
+        r.raise_for_status()
+        return parse_feed(r.content)
+    if "<" not in s[:200]:
+        with open(s, "rb") as f:
+            return parse_feed(f.read())
+    return parse_feed(s)
+
+
+def slugify(s) -> str:
+    s = "".join(_TR.get(c, c) for c in str(s or "").lower())
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+
+
+def series_of(name: str, brand: str = "") -> str:
+    """«… Comfysan Alto-K EC-4 120/18 …» → alto-k; «Comfysan Стелла EC-6» → stella."""
+    s = str(name or "")
+    b = s.lower().find(brand.lower()) if brand else -1
+    rest = s[b + len(brand):] if b >= 0 else s
+    lat, cyr = [], []
+    for tok in re.split(r"[\s,;]+", rest):
+        t = re.sub(r"^[(«\"'\[]+|[)»\"'.\]:]+$", "", tok)
+        if not t:
+            continue
+        if re.search(r"\d|/", t):
+            break
+        if re.fullmatch(r"[a-z][a-z'-]*", t, re.I):
+            lat.append(t)
+            continue
+        if lat:
+            break
+        if b >= 0 and re.fullmatch(r"[А-ЯЁ][а-яё-]*", t) and len(cyr) < 2:
+            cyr.append(t)
+        elif cyr:
+            break
+    return slugify(" ".join(lat or cyr))
+
+
+def parse_templates(templates) -> list:
+    """Строки «URL [| якорь]» (список или текст через перевод строки; # — отключено) → [(url, anchor)]."""
+    lines = templates.splitlines() if isinstance(templates, str) else list(templates or [])
+    out = []
+    for l in lines:
+        l = str(l).strip()
+        if not l or l.startswith("#"):
+            continue
+        url, _, anchor = l.partition(" | ")
+        if re.match(r"^https?://", url.strip(), re.I):
+            out.append((url.strip(), anchor.strip()))
+    return out
+
+
+def _fill(tpl: str, v: dict, encode: bool) -> str:
+    from urllib.parse import quote
+    bad = []
+
+    def rep(m):
+        x = v.get(m.group(1)) or ""
+        if not x:
+            bad.append(m.group(1))
+        return quote(x, safe="") if encode else x
+    out = re.sub(r"\{(article|series|brand|name)\}", rep, tpl)
+    return "" if bad else out
+
+
+def _match_filter(text: str, flt: str) -> bool:
+    hay = str(text or "").lower().replace("ё", "е")
+    for w in str(flt or "").lower().replace("ё", "е").split():
+        if w.startswith("-"):
+            if len(w) > 1 and w[1:] in hay:
+                return False
+        elif w not in hay:
+            return False
+    return True
+
+
+def positions_from_feed(feed, templates=None, brand: str = "Comfysan", filter: str = "", only_available: bool = False,
+                        limit: int = 0, price_field: str = "price") -> list:
+    """Предложения фида (результат parse_feed/load_feed или список Offer) → позиции со ссылками по шаблонам."""
+    offers = feed["offers"] if isinstance(feed, dict) else list(feed)
+    tpls = parse_templates(DEFAULT_LINK_TEMPLATES if templates is None else templates)
+    seen, out = set(), []
+    for f in offers:
+        if limit and len(out) >= limit:
+            break
+        if only_available and f.available is False:
+            continue
+        if not _match_filter(" ".join([f.name, f.category, f.article, f.vendor]), filter):
+            continue
+        key = (f.article or f.name).lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        b = f.vendor or brand or ""
+        v = {"article": f.article, "series": series_of(f.name, b), "brand": slugify(b), "name": f.name}
+        links = []
+        for url_t, anchor_t in tpls:
+            url = _fill(url_t, v, True)
+            if url and all(l.url != url for l in links):
+                links.append(Link(url=url, anchor=_fill(anchor_t, v, False) if anchor_t else ""))
+        if price_field == "oldprice":
+            price = f.old_price or f.price
+        elif price_field == "max":
+            price = max(f.price or 0, f.old_price or 0)
+        else:
+            price = f.price
+        out.append(Position(name=f.name, article=f.article, our_price=float(price or 0), links=links))
+    return out
+
+
+def merge_positions(existing: list, incoming: list, replace: bool = False) -> dict:
+    """Слияние по артикулу: цена и пустое название — из фида, ручные ссылки остаются,
+    ссылка по шаблону не добавляется, если у позиции уже есть ссылка на этот сайт.
+    → {'positions', 'added', 'updated', 'links'}"""
+    import copy
+    lst = [] if replace else copy.deepcopy(list(existing or []))
+    key = lambda p: (p.article or p.name).lower()  # noqa: E731
+    idx = {key(p): p for p in lst}
+    added = updated = links = 0
+    for n in incoming or []:
+        p = idx.get(key(n))
+        if p is None:
+            n = copy.deepcopy(n)
+            idx[key(n)] = n
+            lst.append(n)
+            added += 1
+            links += len(n.links)
+            continue
+        if n.our_price and n.our_price != p.our_price:
+            p.our_price = n.our_price
+            updated += 1
+        p.name = p.name or n.name
+        for l in n.links:
+            if any(x.url == l.url or site_of(x.url) == site_of(l.url) for x in p.links):
+                continue
+            p.links.append(copy.deepcopy(l))
+            links += 1
+    return {"positions": lst, "added": added, "updated": updated, "links": links}
+
+
+def estimate_cycle_seconds(positions: list, settings: Settings = None) -> float:
+    st = (settings or Settings()).normalized()
+    urls = {l.url for p in positions for l in p.links if l.enabled and not is_excluded(l.url, st.excluded_domains)}
+    return max(0, len(urls) - 1) * (st.min_pause + st.max_pause) / 2
 
 
 # --------------------------------------------------------------------------------------------

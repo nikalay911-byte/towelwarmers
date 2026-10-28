@@ -271,6 +271,88 @@ class RealHTTP(unittest.TestCase):
             srv.shutdown()
 
 
+FEED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "test", "fixtures", "feed-yml-cp1251.xml")
+
+
+class Feed(unittest.TestCase):
+    def test_yml_cp1251(self):
+        f = pm.load_feed(FEED)
+        self.assertEqual((f["format"], f["shop"], f["categories"], len(f["offers"])), ("yml", "SanComfGroup", 4, 7))
+        by = {o.id: o for o in f["offers"]}
+        self.assertEqual((by["5001"].article, by["5001"].price, by["5001"].category), ("018160", 27900, "Полотенцесушители / Электрические"))
+        self.assertEqual(by["5002"].article, "018184")                       # <param name="Артикул">
+        self.assertTrue(by["5002"].name.startswith("Полотенцесушитель электрический Comfysan Alto-K EC-4"))  # CDATA
+        self.assertEqual((by["5003"].article, by["5003"].price, by["5003"].old_price), ("018443", 32000, 34100))
+        self.assertEqual((by["5004"].price, by["5004"].available), (22500, False))
+        self.assertEqual(by["5005"].name, 'Полотенцесушитель водяной Comfysan "Лесенка" П6 50x80, белый')
+        self.assertEqual(by["5005"].url, "https://sancomfgroup.ru/catalog/vodyanye/lesenka-klassik-50-80/?a=1&b=2")
+        self.assertEqual(len(pm.parse_feed(open(FEED, "rb").read().decode("cp1251"))["offers"]), 7, "str на входе")
+
+    def test_rss_and_broken_xml(self):
+        f = pm.parse_feed(b"""<?xml version="1.0"?><rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel><title>Shop</title>
+          <item><g:id>A1</g:id><title>Comfysan Alto-K EC-3 120/12 gunmetal</title><link>https://s.ru/a1</link>
+          <g:price>27900.00 RUB</g:price><g:availability>in stock</g:availability><g:mpn>018160</g:mpn><g:brand>Comfysan</g:brand></item>
+          </channel></rss>""")
+        o = f["offers"][0]
+        self.assertEqual((f["format"], f["shop"], o.article, o.price, o.available, o.vendor, o.url),
+                         ("rss", "Shop", "018160", 27900, True, "Comfysan", "https://s.ru/a1"))
+        bad = pm.parse_feed("<yml_catalog><shop><offers><offer id='1'><name>A & B 018160</name><price>100</price></offer></offers></shop></yml_catalog>")
+        self.assertEqual(bad["offers"][0].article, "018160", "неэкранированный & — разбор через lxml recover")
+
+    def test_series_templates_positions(self):
+        self.assertEqual(pm.series_of("Полотенцесушитель электрический Comfysan Alto-K EC-4 120/18, золото", "Comfysan"), "alto-k")
+        self.assertEqual(pm.series_of("Comfysan Альто-К (Alto-K) EC-3 120/12", "Comfysan"), "alto-k")
+        self.assertEqual(pm.series_of("Полотенцесушитель Comfysan Стелла EC-6 70/40", "Comfysan"), "stella")
+        self.assertEqual(pm.series_of("Крючок настенный", "Comfysan"), "")
+        self.assertEqual(pm.parse_templates("https://a.ru/{article}\n# https://off.ru/{article}\nмусор\nhttps://b.ru/s?q={article} | {article}"),
+                         [("https://a.ru/{article}", ""), ("https://b.ru/s?q={article}", "{article}")])
+        f = pm.load_feed(FEED)
+        ps = pm.positions_from_feed(f, filter="электрические -ЭК")
+        self.assertEqual([p.article for p in ps], ["018160", "018184", "018443", "018191"])
+        self.assertEqual([(l.url, l.anchor) for l in ps[0].links],
+                         [("https://www.santehtop.ru/comfysan-alto-k-018160/", ""), ("https://santehpremium.ru/search/?q=018160", "018160")])
+        self.assertEqual(ps[3].links[0].url, "https://www.santehtop.ru/comfysan-stella-018191/")
+        self.assertEqual(len(pm.positions_from_feed(f, filter="электрические -ЭК", only_available=True)), 3)
+        self.assertEqual(len(pm.positions_from_feed(f, limit=2)), 2)
+        self.assertEqual(pm.positions_from_feed(f, filter="018443", price_field="oldprice")[0].our_price, 34100)
+        self.assertEqual(len(pm.positions_from_feed(f, filter="крючок")[0].links), 1, "без серии santehtop-шаблон не строится")
+        self.assertEqual(len(pm.load_positions(FEED)), 7, "load_positions понимает .xml")
+
+    def test_merge(self):
+        import copy
+        cur = copy.deepcopy(pm.SAMPLE_POSITIONS)
+        m = pm.merge_positions(cur, pm.positions_from_feed(pm.load_feed(FEED)))
+        self.assertEqual((m["added"], m["updated"]), (3, 1))
+        gold = next(p for p in m["positions"] if p.article == "018443")
+        self.assertEqual((gold.our_price, len(gold.links)), (32000, 4))
+        st = next(p for p in m["positions"] if p.article == "018191")
+        self.assertEqual([pm.host_of(l.url) for l in st.links], ["santehtop.ru", "santehnica.ru", "santehpremium.ru"])
+        self.assertEqual(next(p for p in cur if p.article == "018443").our_price, 34100, "исходный список не меняется")
+        self.assertEqual(len(pm.merge_positions(cur, pm.positions_from_feed(pm.load_feed(FEED)), replace=True)["positions"]), 7)
+        self.assertGreater(pm.estimate_cycle_seconds(m["positions"]), 0)
+
+    def test_load_feed_by_url(self):
+        body = open(FEED, "rb").read()
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/xml")   # без charset — кодировку берём из <?xml?>
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            f = pm.load_feed(f"http://127.0.0.1:{srv.server_port}/bitrix/catalog_export/x.xml")
+            self.assertEqual(len(f["offers"]), 7)
+            self.assertIn("Полотенцесушитель", f["offers"][0].name)
+        finally:
+            srv.shutdown()
+
+
 class NotebookSync(unittest.TestCase):
     def test_notebook_embeds_current_module(self):
         import json

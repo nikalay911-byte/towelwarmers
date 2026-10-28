@@ -34,6 +34,9 @@ cells = [
 
 **Как пользоваться:** `Среда выполнения → Выполнить все` (или Ctrl+F9). Потом поменяйте настройки в шаге 2 и источник позиций в шаге 3.
 
+* Позиции по умолчанию берутся из **XML-фида каталога** (YML, выгрузка Bitrix): наименование, артикул и наша цена.
+  Ссылки на конкурентов строятся по шаблонам: santehtop.ru — адрес карточки, santehpremium.ru — поиск по артикулу.
+
 * Капчи, Cloudflare, 403/429 расширение **не обходит**: такой сайт пропускается до конца прогона.
 * После ошибки 5xx страница один раз перепроверяется в конце очереди.
 * Колонки списка позиций такие же, как в расширении: `Наименование · Артикул · Наша цена · Ссылка [· Якорь · CSS-селектор]`.
@@ -67,19 +70,60 @@ print(settings)
     md("## 3. Позиции и ссылки конкурентов"),
     code("""
 #@title Откуда взять список { display-mode: "form" }
-SOURCE = "пример (4 позиции Comfysan)"  #@param ["пример (4 позиции Comfysan)", "загрузить файл CSV/XLSX", "Google Таблица"]
-#@markdown Для Google Таблицы — ссылка на неё (первый лист, колонки: Наименование, Артикул, Наша цена, Ссылка, [Якорь], [CSS-селектор]):
+SOURCE = "XML-фид каталога (YML)"  #@param ["XML-фид каталога (YML)", "пример (4 позиции Comfysan)", "загрузить файл CSV/XLSX/XML", "Google Таблица"]
+#@markdown **XML-фид:** ссылка на выгрузку (пусто — загрузить файл .xml с компьютера). Из фида берутся наименование, артикул и наша цена.
+FEED_URL = "https://sancomfgroup.ru/bitrix/catalog_export/cmfsn_2CFg.xml"  #@param {type:"string"}
+#@markdown Фильтр: слова через пробел (все должны быть в названии/категории), `-слово` — исключить. Пример: `электрические -ЭК`
+FEED_FILTER = ""  #@param {type:"string"}
+ONLY_AVAILABLE = False  #@param {type:"boolean"}
+FEED_LIMIT = 0  #@param {type:"integer"}
+OUR_PRICE_FROM = "price"  #@param ["price", "oldprice", "max"]
+BRAND = "Comfysan"  #@param {type:"string"}
+#@markdown Ссылки конкурентов строятся по шаблонам `URL | якорь` с подстановками `{article}` `{series}` `{brand}` `{name}` (пусто — не использовать):
+TEMPLATE_1 = "https://www.santehtop.ru/{brand}-{series}-{article}/"  #@param {type:"string"}
+TEMPLATE_2 = "https://santehpremium.ru/search/?q={article} | {article}"  #@param {type:"string"}
+TEMPLATE_3 = ""  #@param {type:"string"}
+TEMPLATE_4 = ""  #@param {type:"string"}
+#@markdown Добавить к позициям из фида найденные вручную ссылки из примера (santehnica, santeh-crystal, vseinstrumenti):
+MERGE_SAMPLE_LINKS = True  #@param {type:"boolean"}
+#@markdown **Google Таблица:** ссылка (первый лист, колонки: Наименование, Артикул, Наша цена, Ссылка, [Якорь], [CSS-селектор]):
 SHEET_URL = ""  #@param {type:"string"}
 
 import copy, pandas as pd
-if SOURCE.startswith("пример"):
-    positions = copy.deepcopy(pm.SAMPLE_POSITIONS)
-elif SOURCE.startswith("загрузить"):
+
+def _upload():
     from google.colab import files
-    up = files.upload()                       # CSV из расширения («Выгрузить позиции») или Excel
+    up = files.upload()
     name = next(iter(up))
     open(name, "wb").write(up[name])
-    positions = pm.load_positions(name)
+    return name
+
+if SOURCE.startswith("XML"):
+    try:
+        feed = pm.load_feed(FEED_URL.strip() or _upload(), settings)
+    except Exception as e:
+        print(f"Не удалось скачать фид ({type(e).__name__}: {e}).")
+        print("Сайт может не отвечать серверам Google. Откройте ссылку в браузере, сохраните файл (Ctrl+S) и выберите его:")
+        feed = pm.load_feed(_upload())
+    print(f"Фид: {feed['format'].upper()} «{feed['shop']}», товаров {len(feed['offers'])}, категорий {feed['categories']}")
+    positions = pm.positions_from_feed(feed, templates=[TEMPLATE_1, TEMPLATE_2, TEMPLATE_3, TEMPLATE_4], brand=BRAND,
+                                       filter=FEED_FILTER, only_available=ONLY_AVAILABLE, limit=FEED_LIMIT,
+                                       price_field=OUR_PRICE_FROM)
+    print(f"После фильтра: {len(positions)} позиций")
+    if MERGE_SAMPLE_LINKS:   # точные ссылки на карточки из примера важнее шаблонных (поиск) на том же сайте
+        sample = {sp.article: sp for sp in pm.SAMPLE_POSITIONS}
+        for p in positions:
+            sp = sample.get(p.article)
+            if sp:
+                sites = {pm.site_of(l.url) for l in sp.links}
+                p.links = copy.deepcopy(sp.links) + [l for l in p.links if pm.site_of(l.url) not in sites]
+    no_price = [p.article for p in positions if not p.our_price]
+    if no_price:
+        print(f"⚠ Без цены в фиде ({len(no_price)}): {', '.join(no_price[:10])}{' …' if len(no_price) > 10 else ''} — для них % не считается")
+elif SOURCE.startswith("пример"):
+    positions = copy.deepcopy(pm.SAMPLE_POSITIONS)
+elif SOURCE.startswith("загрузить"):
+    positions = pm.load_positions(_upload())   # CSV из расширения («Выгрузить позиции»), Excel или XML-фид
 else:
     from google.colab import auth
     import gspread
@@ -89,9 +133,20 @@ else:
     positions = pm.positions_from_rows(gc.open_by_url(SHEET_URL).sheet1.get_all_values())
 
 links = sum(len(p.links) for p in positions)
-print(f"Позиций: {len(positions)}, ссылок: {links}")
+secs = pm.estimate_cycle_seconds(positions, settings)
+print(f"Позиций: {len(positions)}, ссылок: {links} → один круг ≈ {secs / 60:.0f} мин (пауза {settings.min_pause:g}–{settings.max_pause:g} с)")
 pd.DataFrame([{"Товар": p.name, "Артикул": p.article, "Наша цена": p.our_price, "Ссылка": l.url, "Якорь": l.anchor}
               for p in positions for l in p.links])
+""", form=True),
+    code("""
+#@title Скачать список позиций в CSV (для расширения: «Импорт из Excel / CSV» или для правки в Excel) { display-mode: "form" }
+DOWNLOAD_POSITIONS_CSV = False  #@param {type:"boolean"}
+open("позиции.csv", "w", encoding="utf-8").write(pm.positions_to_csv(positions))
+if DOWNLOAD_POSITIONS_CSV:
+    from google.colab import files
+    files.download("позиции.csv")
+else:
+    print("Список сохранён в позиции.csv (папка слева 📁). Отметьте галочку, чтобы скачать.")
 """, form=True),
     code("""
 #@title (необязательно) Chromium для JS-сайтов из USE_BROWSER_FOR { display-mode: "form" }

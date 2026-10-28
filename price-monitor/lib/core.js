@@ -359,6 +359,186 @@
     return '\ufeff' + lines.join('\r\n');
   }
 
+
+  /* ---------------- XML-фид каталога (YML / Яндекс.Маркет, Google Merchant RSS/Atom) ---------------- */
+  /** Шаблоны ссылок конкурентов: «URL [| якорь]». Подстановки: {article} {series} {brand} {name}. */
+  var DEFAULT_LINK_TEMPLATES = [
+    'https://www.santehtop.ru/{brand}-{series}-{article}/',
+    'https://santehpremium.ru/search/?q={article} | {article}'
+  ];
+  var DEFAULT_FEED = {
+    url: 'https://sancomfgroup.ru/bitrix/catalog_export/cmfsn_2CFg.xml',
+    brand: 'Comfysan', filter: '', onlyAvailable: false, limit: 0, priceField: 'price',
+    templates: DEFAULT_LINK_TEMPLATES.join('\n')
+  };
+  var ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', laquo: '«', raquo: '»', mdash: '—', ndash: '–', hellip: '…' };
+  function xmlText(s) {
+    s = String(s == null ? '' : s).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, function (m, c) {
+      return c.replace(/&/g, '&amp;').replace(/</g, '&lt;');   // содержимое CDATA — как есть
+    });
+    s = s.replace(/<[^>]+>/g, ' ');
+    s = s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, function (m, e) {
+      if (e[0] === '#') { var n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10); return isFinite(n) ? String.fromCodePoint(n) : m; }
+      var k = e.toLowerCase(); return k in ENT ? ENT[k] : m;
+    });
+    return s.replace(/\s+/g, ' ').trim();
+  }
+  function xmlAttrs(s) {
+    var o = {}, re = /([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g, m;
+    while ((m = re.exec(s || ''))) o[m[1].toLowerCase()] = xmlText(m[2] != null ? m[2] : m[3]);
+    return o;
+  }
+  /** Значение первого из тегов (с любым префиксом пространства имён: g:price, price). */
+  function xmlTag(block, names) {
+    for (var i = 0; i < names.length; i++) {
+      var re = new RegExp('<(?:[\\w-]+:)?' + names[i] + '(?:\\s[^>]*)?>([\\s\\S]*?)</(?:[\\w-]+:)?' + names[i] + '\\s*>', 'i');
+      var m = block.match(re);
+      if (m) { var v = xmlText(m[1]); if (v) return v; }
+    }
+    return '';
+  }
+  /** Байты фида → текст по кодировке из <?xml … encoding="…"?> (Bitrix часто отдаёт windows-1251). */
+  function decodeXmlBytes(bytes) {
+    var u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    var head = '';
+    for (var i = 0; i < Math.min(u8.length, 300); i++) head += String.fromCharCode(u8[i]);
+    var m = head.match(/encoding\s*=\s*["']([\w-]+)["']/i);
+    var enc = (m ? m[1] : 'utf-8').toLowerCase();
+    if (/^(cp|win)-?1251$/.test(enc)) enc = 'windows-1251';
+    try { return new TextDecoder(enc).decode(u8); } catch (e) { return new TextDecoder('utf-8').decode(u8); }
+  }
+  var ART_PARAM_RE = /^(артикул|арт\.?|код производителя|артикул производителя|vendor ?code|sku|mpn)$/i;
+  /**
+   * Разбор фида. → { format, shop, offers: [{ id, name, article, price, oldPrice, url, vendor, category, available, currency }] }
+   * Артикул: vendorCode → <param name="Артикул"> → g:mpn / sku → 6 цифр в названии или URL → id предложения.
+   */
+  function parseFeed(xml) {
+    xml = String(xml || '').replace(/^\ufeff/, '');
+    var cats = {}, parents = {}, m;
+    var catRe = /<category\b([^>]*)>([\s\S]*?)<\/category>/gi;
+    while ((m = catRe.exec(xml))) { var a = xmlAttrs(m[1]); if (a.id) { cats[a.id] = xmlText(m[2]); if (a.parentid) parents[a.id] = a.parentid; } }
+    var catPath = function (id) {
+      var out = [], guard = 0;
+      while (id && cats[id] != null && guard++ < 20) { out.unshift(cats[id]); id = parents[id]; }
+      return out.join(' / ');
+    };
+    var format = /<yml_catalog\b/i.test(xml) || /<offer\b/i.test(xml) ? 'yml' : (/<rss\b/i.test(xml) ? 'rss' : (/<feed\b/i.test(xml) ? 'atom' : 'unknown'));
+    var re = format === 'yml' ? /<offer\b([^>]*)>([\s\S]*?)<\/offer>/gi : (format === 'atom' ? /<entry\b([^>]*)>([\s\S]*?)<\/entry>/gi : /<item\b([^>]*)>([\s\S]*?)<\/item>/gi);
+    var offers = [];
+    while ((m = re.exec(xml))) {
+      var at = xmlAttrs(m[1]), b = m[2], params = {}, pm, pre = /<param\b([^>]*)>([\s\S]*?)<\/param>/gi;
+      while ((pm = pre.exec(b))) { var pa = xmlAttrs(pm[1]); if (pa.name) params[pa.name.trim()] = xmlText(pm[2]); }
+      var name = xmlTag(b, ['name', 'title']);
+      if (!name) name = [xmlTag(b, ['typePrefix']), xmlTag(b, ['vendor']), xmlTag(b, ['model'])].filter(Boolean).join(' ');
+      var url = xmlTag(b, ['url', 'link']);
+      if (!url) { var lm = b.match(/<link\b[^>]*href\s*=\s*["']([^"']+)["']/i); if (lm) url = xmlText(lm[1]); }
+      var article = xmlTag(b, ['vendorCode']);
+      if (!article) for (var k in params) if (ART_PARAM_RE.test(k) && params[k]) { article = params[k]; break; }
+      if (!article) article = xmlTag(b, ['mpn', 'sku', 'article']);
+      if (!article) { var d6 = (name.match(/(?:^|[^\d])(\d{6})(?!\d)/) || url.match(/(?:^|[^\d])(\d{6})(?!\d)/) || [])[1]; if (d6) article = d6; }
+      var id = at.id || xmlTag(b, ['id']);
+      if (!article) article = id || '';
+      var availRaw = at.available != null ? at.available : xmlTag(b, ['availability', 'available']);
+      var available = availRaw === '' ? null : /^(true|1|yes|in[ _]stock|в наличии)$/i.test(availRaw);
+      var catId = xmlTag(b, ['categoryId']);
+      offers.push({
+        id: id, name: name, article: article,
+        price: parsePrice(xmlTag(b, ['price']), { min: 1 }),
+        oldPrice: parsePrice(xmlTag(b, ['oldprice', 'sale_price_old']), { min: 1 }),
+        url: url, vendor: xmlTag(b, ['vendor', 'brand']),
+        category: catId ? (catPath(catId) || catId) : xmlTag(b, ['product_type', 'google_product_category']),
+        available: available, currency: xmlTag(b, ['currencyId', 'currency']), params: params
+      });
+    }
+    return { format: format, shop: xmlTag(xml.slice(0, 5000), ['name', 'title']), offers: offers, categories: Object.keys(cats).length };
+  }
+  var TR = { 'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya' };
+  function slugify(s) {
+    return String(s || '').toLowerCase().split('').map(function (c) { return TR[c] != null ? TR[c] : c; }).join('')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  }
+  /** Серия из названия: «… Comfysan Alto-K EC-4 120/18 …» → alto-k; «Comfysan Стелла EC-6» → stella. */
+  function seriesOf(name, brand) {
+    var s = String(name || ''), b = brand ? s.toLowerCase().indexOf(String(brand).toLowerCase()) : -1;
+    var rest = b >= 0 ? s.slice(b + String(brand).length) : s;
+    var lat = [], cyr = [], toks = rest.split(/[\s,;]+/);
+    for (var i = 0; i < toks.length; i++) {
+      var t = toks[i].replace(/^[(«"'\[]+|[)»"'.\]:]+$/g, '');
+      if (!t) continue;
+      if (/\d|\//.test(t)) break;                                   // EC-4, 120/18 — дальше уже модель/размер
+      if (/^[a-z][a-z'-]*$/i.test(t)) { lat.push(t); continue; }
+      if (lat.length) break;
+      if (b >= 0 && /^[А-ЯЁ][а-яё-]*$/.test(t) && cyr.length < 2) cyr.push(t);
+      else if (cyr.length) break;
+    }
+    return slugify((lat.length ? lat : cyr).join(' '));
+  }
+  function parseTemplates(text) {
+    return String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); })
+      .filter(function (l) { return l && l[0] !== '#'; })
+      .map(function (l) { var i = l.indexOf(' | '); return i < 0 ? { url: l, anchor: '' } : { url: l.slice(0, i).trim(), anchor: l.slice(i + 3).trim() }; })
+      .filter(function (t) { return /^https?:\/\//i.test(t.url); });
+  }
+  function fillTemplate(tpl, v, encode) {
+    var bad = false;
+    var out = tpl.replace(/\{(article|series|brand|name)\}/g, function (m, k) {
+      var x = v[k] || ''; if (!x) bad = true;
+      return encode ? encodeURIComponent(x) : x;
+    });
+    return bad ? '' : out;
+  }
+  function matchFilter(text, filter) {
+    var hay = String(text || '').toLowerCase().replace(/ё/g, 'е');
+    return String(filter || '').toLowerCase().replace(/ё/g, 'е').split(/\s+/).filter(Boolean).every(function (w) {
+      return w[0] === '-' ? (w.length < 2 || hay.indexOf(w.slice(1)) < 0) : hay.indexOf(w) >= 0;
+    });
+  }
+  /** Предложения фида → позиции со ссылками по шаблонам. opts: templates, brand, filter, onlyAvailable, limit, priceField. */
+  function positionsFromFeed(offers, opts) {
+    var o = Object.assign({}, DEFAULT_FEED, opts || {});
+    var tpls = Array.isArray(o.templates) ? o.templates : parseTemplates(o.templates);
+    var seen = {}, out = [];
+    (offers || []).forEach(function (f) {
+      if (o.limit > 0 && out.length >= o.limit) return;
+      if (o.onlyAvailable && f.available === false) return;
+      if (!matchFilter(f.name + ' ' + f.category + ' ' + f.article + ' ' + f.vendor, o.filter)) return;
+      var key = String(f.article || f.name).toLowerCase();
+      if (!key || seen[key]) return;
+      seen[key] = 1;
+      var brand = f.vendor || o.brand || '';
+      var v = { article: f.article, series: seriesOf(f.name, brand), brand: slugify(brand), name: f.name };
+      var links = [];
+      tpls.forEach(function (t) {
+        var url = fillTemplate(t.url, v, true);
+        if (url && !links.some(function (l) { return l.url === url; })) links.push({ url: url, anchor: t.anchor ? fillTemplate(t.anchor, v, false) : '' });
+      });
+      var price = o.priceField === 'oldprice' ? (f.oldPrice || f.price) : (o.priceField === 'max' ? Math.max(f.price || 0, f.oldPrice || 0) : f.price);
+      out.push({ name: f.name, article: f.article, ourPrice: price || 0, links: links });
+    });
+    return normalizePositions(out);
+  }
+  /**
+   * Слияние позиций из фида с текущими (по артикулу). Цена и пустое название берутся из фида; ручные ссылки остаются;
+   * ссылка по шаблону не добавляется, если у позиции уже есть ссылка на этот сайт.
+   */
+  function mergePositions(existing, incoming, replace) {
+    var list = replace ? [] : normalizePositions(existing || []);
+    var key = function (p) { return String(p.article || p.name).toLowerCase(); };
+    var map = {}, added = 0, updated = 0, links = 0;
+    list.forEach(function (p) { map[key(p)] = p; });
+    normalizePositions(incoming || []).forEach(function (n) {
+      var p = map[key(n)];
+      if (!p) { map[key(n)] = n; list.push(n); added++; links += n.links.length; return; }
+      if (n.ourPrice && n.ourPrice !== p.ourPrice) { p.ourPrice = n.ourPrice; updated++; }
+      if (!p.name) p.name = n.name;
+      n.links.forEach(function (l) {
+        if (p.links.some(function (x) { return x.url === l.url || siteOf(x.url) === siteOf(l.url); })) return;
+        p.links.push(l); links++;
+      });
+    });
+    return { positions: list, added: added, updated: updated, links: links };
+  }
+
   /* ---------------- стартовый набор: позиции из отчёта ---------------- */
   var SAMPLE_POSITIONS = [
     {
@@ -405,6 +585,9 @@
     shuffle: shuffle, buildQueue: buildQueue, randomDelayMs: randomDelayMs, pickNext: pickNext,
     estimateCycleMs: estimateCycleMs, fmtDuration: fmtDuration, fmtTime: fmtTime,
     reportRows: reportRows, dumpLabel: dumpLabel, toCSV: toCSV, parseDelimited: parseDelimited,
-    importPositions: importPositions, exportPositionsCSV: exportPositionsCSV
+    importPositions: importPositions, exportPositionsCSV: exportPositionsCSV,
+    DEFAULT_FEED: DEFAULT_FEED, DEFAULT_LINK_TEMPLATES: DEFAULT_LINK_TEMPLATES, decodeXmlBytes: decodeXmlBytes,
+    parseFeed: parseFeed, slugify: slugify, seriesOf: seriesOf, parseTemplates: parseTemplates,
+    positionsFromFeed: positionsFromFeed, mergePositions: mergePositions
   };
 });

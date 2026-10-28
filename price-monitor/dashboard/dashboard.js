@@ -275,6 +275,95 @@
     toast('Импорт: новых позиций ' + res.added + ', ссылок ' + res.links + '. Проверьте и нажмите «Сохранить».');
   });
 
+
+  // импорт из XML-фида каталога
+  var feed = null;   // { data, source }
+  function feedOpts() {
+    return {
+      url: $('#feedUrl').value.trim(), brand: $('#feedBrand').value.trim(), filter: $('#feedFilter').value.trim(),
+      onlyAvailable: $('#feedAvail').checked, limit: Math.max(0, Number($('#feedLimit').value) || 0),
+      priceField: $('#feedPrice').value, templates: $('#feedTpl').value
+    };
+  }
+  function feedPositions() { return feed ? PM.positionsFromFeed(feed.data.offers, feedOpts()) : []; }
+  function renderFeedPreview() {
+    var info = $('#feedInfo'), box = $('#feedPreview');
+    if (!feed) { $('#feedGo').disabled = true; box.innerHTML = ''; return; }
+    var d = feed.data, list = feedPositions();
+    var nLinks = list.reduce(function (a, p) { return a + p.links.length; }, 0);
+    var base = $('#feedReplace').checked ? [] : (draft || S.positions);
+    var merged = PM.mergePositions(base, list, false);
+    var total = merged.positions.reduce(function (a, p) { return a + p.links.filter(function (l) { return l.enabled && !PM.isExcluded(l.url, S.settings.excludedDomains); }).length; }, 0);
+    var cycle = PM.estimateCycleMs(total, S.settings);
+    var noPrice = list.filter(function (p) { return !p.ourPrice; }).length;
+    var html = 'Фид: <b>' + esc(d.format.toUpperCase()) + '</b>' + (d.shop ? ' «' + esc(d.shop) + '»' : '') + ', товаров <b>' + d.offers.length + '</b>' +
+      (d.categories ? ', категорий ' + d.categories : '') + '. После фильтра: <b>' + list.length + '</b> позиций, ссылок по шаблонам <b>' + nLinks + '</b>' +
+      (noPrice ? ', <b>без цены: ' + noPrice + '</b>' : '') + '.<br>После импорта: новых позиций ' + merged.added + ', обновится цен ' + merged.updated +
+      ', всего ссылок к проверке <b>' + total + '</b> → один круг ≈ <b>' + esc(PM.fmtDuration(cycle)) + '</b> (пауза ' + S.settings.minDelayMin + '–' + S.settings.maxDelayMin + ' мин).';
+    if (S.settings.repeatHours && cycle > S.settings.repeatHours * PM.HOUR) html += '<br><b>Круг длиннее интервала повтора (' + S.settings.repeatHours + ' ч)</b> — сузьте фильтр, уменьшите паузу в настройках или проверяйте большие списки в Colab.';
+    info.className = 'banner ' + (list.length ? 'info' : 'warn');
+    info.innerHTML = list.length ? html : 'Под фильтр не попало ни одного товара (в фиде ' + d.offers.length + ').';
+    var rows = list.slice(0, 200).map(function (p) {
+      return '<tr><td>' + esc(p.article) + '</td><td>' + esc(p.name) + '</td><td class="num">' + (p.ourPrice ? esc(PM.fmtMoney(p.ourPrice)) : '<span class="muted">—</span>') +
+        '</td><td>' + (p.links.map(function (l) { return '<a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(PM.hostOf(l.url)) + '</a>'; }).join(', ') || '<span class="muted">нет</span>') + '</td></tr>';
+    }).join('');
+    box.innerHTML = list.length ? '<table><thead><tr><th>Артикул</th><th>Наименование</th><th>Наша цена</th><th>Ссылки</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      (list.length > 200 ? '<p class="hint">…и ещё ' + (list.length - 200) + '</p>' : '') : '';
+    $('#feedGo').disabled = !list.length;
+  }
+  function setFeed(text, source) {
+    var data = PM.parseFeed(text);
+    if (!data.offers.length) {
+      feed = null; renderFeedPreview();
+      $('#feedInfo').className = 'banner warn';
+      $('#feedInfo').textContent = 'В файле не найдено товаров (<offer>/<item>). Это точно XML-фид каталога?';
+      return;
+    }
+    feed = { data: data, source: source };
+    renderFeedPreview();
+  }
+  $('#btnFeed').onclick = function () {
+    chrome.storage.local.get('feedCfg').then(function (r) {
+      var c = Object.assign({}, PM.DEFAULT_FEED, r.feedCfg || {});
+      $('#feedUrl').value = c.url; $('#feedBrand').value = c.brand; $('#feedFilter').value = c.filter;
+      $('#feedAvail').checked = !!c.onlyAvailable; $('#feedLimit').value = c.limit || 0; $('#feedPrice').value = c.priceField;
+      $('#feedTpl').value = c.templates; $('#feedReplace').checked = false;
+      renderFeedPreview();
+      $('#feedDlg').showModal();
+    });
+  };
+  $('#feedLoad').onclick = function () {
+    var url = $('#feedUrl').value.trim(), origin;
+    try { origin = new URL(url).origin + '/*'; } catch (e) { $('#feedInfo').textContent = 'Неверная ссылка'; return; }
+    $('#feedInfo').className = 'banner info'; $('#feedInfo').textContent = 'Загрузка…';
+    chrome.permissions.request({ origins: [origin] }).then(function (ok) {   // запрос — синхронно в обработчике клика
+      if (!ok) throw new Error('не выдан доступ к ' + origin);
+      return fetch(url, { cache: 'no-store', credentials: 'omit' });
+    }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.arrayBuffer();
+    }).then(function (buf) { setFeed(PM.decodeXmlBytes(buf), url); }).catch(function (e) {
+      feed = null; renderFeedPreview();
+      $('#feedInfo').className = 'banner warn';
+      $('#feedInfo').textContent = 'Не удалось загрузить: ' + e.message + '. Откройте ссылку в браузере, сохраните файл (Ctrl+S) и выберите его кнопкой «Файл…».';
+    });
+  };
+  $('#feedFile').onchange = function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    f.arrayBuffer().then(function (buf) { setFeed(PM.decodeXmlBytes(buf), f.name); e.target.value = ''; });
+  };
+  ['#feedFilter', '#feedBrand', '#feedLimit', '#feedTpl'].forEach(function (id) { $(id).addEventListener('input', renderFeedPreview); });
+  ['#feedAvail', '#feedPrice', '#feedReplace'].forEach(function (id) { $(id).addEventListener('change', renderFeedPreview); });
+  $('#feedDlg').addEventListener('close', function () {
+    var cfg = feedOpts();
+    chrome.storage.local.set({ feedCfg: cfg });
+    if ($('#feedDlg').returnValue !== 'ok' || !feed) return;
+    if (!draft) draft = PM.normalizePositions(S.positions);
+    var res = PM.mergePositions($('#feedReplace').checked ? [] : draft, feedPositions(), false);
+    draft = res.positions; markDirty(); renderEditor();
+    toast('Из фида: новых позиций ' + res.added + ', обновлено цен ' + res.updated + ', ссылок ' + res.links + '. Проверьте и нажмите «Сохранить».');
+  });
+
   /* ---------------- настройки ---------------- */
   function renderSettings() {
     var f = $('#settingsForm'), st = S.settings;

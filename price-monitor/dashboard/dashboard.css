@@ -93,3 +93,20 @@ dialog::backdrop { background: rgba(0, 0, 0, .35); }
 .dlg { padding: 16px 20px; }
 .dlg h3 { margin: 0 0 6px; }
 dialog textarea { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; margin-bottom: 10px; }
+
+/* импорт из XML-фида */
+.dlg.feed { width: min(980px, 92vw); }
+.dlg .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.dlg .row .grow { flex: 1; min-width: 0; }
+.dlg .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px 12px; margin: 8px 0; align-items: end; }
+.dlg .grid label, .dlg label.tpl { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #555; }
+.dlg .grid label.chk { flex-direction: row; align-items: center; }
+.dlg input[type=url], .dlg .grid input, .dlg .grid select, .dlg textarea { font: inherit; padding: 5px 7px; border: 1px solid #ccc; border-radius: 6px; }
+.dlg textarea#feedTpl { font-family: ui-monospace, Consolas, monospace; font-size: 12px; width: 100%; box-sizing: border-box; }
+.btn.file { cursor: pointer; }
+.feed-preview { max-height: 260px; overflow: auto; margin: 8px 0; }
+.feed-preview table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.feed-preview th, .feed-preview td { border-bottom: 1px solid #eee; padding: 3px 6px; text-align: left; vertical-align: top; }
+.feed-preview td.num { text-align: right; white-space: nowrap; }
+.feed-preview .muted { color: #999; }
+.banner.warn b { color: #b3261e; }

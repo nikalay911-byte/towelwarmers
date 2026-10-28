@@ -329,6 +329,110 @@ await t('пауза/продолжить/стоп', async () => {
   eq(chrome._store.run.state, 'idle'); eq(chrome._store.run.queue.length, 0);
 });
 
+
+/* ============================ XML-фид каталога ============================ */
+console.log('\nfeed');
+const FEED_BYTES = fs.readFileSync(path.join(here, 'fixtures', 'feed-yml-cp1251.xml'));
+await t('фид YML в windows-1251: товары, артикулы, цены, категории', () => {
+  const text = PM.decodeXmlBytes(FEED_BYTES);
+  ok(text.includes('Полотенцесушитель'), 'кодировка из <?xml encoding?>');
+  const f = PM.parseFeed(text);
+  eq([f.format, f.shop, f.categories, f.offers.length], ['yml', 'SanComfGroup', 4, 7]);
+  const by = Object.fromEntries(f.offers.map((o) => [o.id, o]));
+  eq([by['5001'].article, by['5001'].price, by['5001'].category], ['018160', 27900, 'Полотенцесушители / Электрические'], 'vendorCode');
+  eq(by['5002'].article, '018184', '<param name="Артикул">');
+  ok(by['5002'].name.startsWith('Полотенцесушитель электрический Comfysan Alto-K EC-4'), 'CDATA');
+  eq([by['5003'].article, by['5003'].price, by['5003'].oldPrice], ['018443', 32000, 34100], '6 цифр в названии + oldprice');
+  eq([by['5004'].price, by['5004'].available], [22500, false]);
+  eq(by['5005'].name, 'Полотенцесушитель водяной Comfysan "Лесенка" П6 50x80, белый', '&quot;');
+  eq(by['5005'].url, 'https://sancomfgroup.ru/catalog/vodyanye/lesenka-klassik-50-80/?a=1&b=2', '&amp;');
+});
+await t('фид Google Merchant RSS', () => {
+  const f = PM.parseFeed(`<?xml version="1.0"?><rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel><title>Shop</title>
+    <item><g:id>A1</g:id><title>Comfysan Alto-K EC-3 120/12 gunmetal</title><link>https://s.ru/a1</link><g:price>27900.00 RUB</g:price>
+    <g:availability>in stock</g:availability><g:mpn>018160</g:mpn><g:brand>Comfysan</g:brand></item></channel></rss>`);
+  eq(f.format, 'rss');
+  eq([f.offers[0].article, f.offers[0].price, f.offers[0].available, f.offers[0].vendor, f.offers[0].url], ['018160', 27900, true, 'Comfysan', 'https://s.ru/a1']);
+});
+await t('серия из названия и шаблоны ссылок', () => {
+  eq(PM.seriesOf('Полотенцесушитель электрический Comfysan Alto-K EC-4 120/18, золото', 'Comfysan'), 'alto-k');
+  eq(PM.seriesOf('Comfysan Альто-К (Alto-K) EC-3 120/12', 'Comfysan'), 'alto-k');
+  eq(PM.seriesOf('Полотенцесушитель Comfysan Стелла EC-6 70/40', 'Comfysan'), 'stella');
+  eq(PM.seriesOf('Крючок настенный', 'Comfysan'), '');
+  eq(PM.parseTemplates('https://a.ru/{article}\n# https://off.ru/{article}\nмусор\nhttps://b.ru/s?q={article} | {article}'),
+    [{ url: 'https://a.ru/{article}', anchor: '' }, { url: 'https://b.ru/s?q={article}', anchor: '{article}' }]);
+  const f = PM.parseFeed(PM.decodeXmlBytes(FEED_BYTES));
+  const ps = PM.positionsFromFeed(f.offers, { filter: 'электрические -ЭК' });
+  eq(ps.map((p) => p.article), ['018160', '018184', '018443', '018191'], 'фильтр по категории и исключение');
+  eq(ps[0].links.map((l) => [l.url, l.anchor]), [['https://www.santehtop.ru/comfysan-alto-k-018160/', ''], ['https://santehpremium.ru/search/?q=018160', '018160']]);
+  eq(ps[3].links[0].url, 'https://www.santehtop.ru/comfysan-stella-018191/', 'кириллическая серия → транслит');
+  eq(PM.positionsFromFeed(f.offers, { onlyAvailable: true, filter: 'электрические -ЭК' }).length, 3, 'только в наличии');
+  eq(PM.positionsFromFeed(f.offers, { limit: 2 }).length, 2);
+  eq(PM.positionsFromFeed(f.offers, { filter: '018443', priceField: 'oldprice' })[0].ourPrice, 34100);
+  const hook = PM.positionsFromFeed(f.offers, { filter: 'крючок' })[0];
+  eq(hook.links.length, 1, 'без серии santehtop-шаблон не строится, поиск — да');
+});
+await t('слияние с текущим списком: цена из фида, ручные ссылки целы, без дублей сайтов', () => {
+  const f = PM.parseFeed(PM.decodeXmlBytes(FEED_BYTES));
+  const cur = PM.normalizePositions(PM.SAMPLE_POSITIONS);
+  const m = PM.mergePositions(cur, PM.positionsFromFeed(f.offers, {}));
+  eq([m.added, m.updated], [3, 1]);
+  const gold = m.positions.find((p) => p.article === '018443');
+  eq(gold.ourPrice, 32000, 'цена обновлена из фида');
+  eq(gold.links.length, 4, 'santehtop и santehpremium уже были — шаблонные ссылки не добавлены');
+  const st = m.positions.find((p) => p.article === '018191');
+  eq(st.links.map((l) => PM.hostOf(l.url)), ['santehtop.ru', 'santehnica.ru', 'santehpremium.ru'], 'добавлен только новый сайт');
+  eq(cur.find((p) => p.article === '018443').ourPrice, 34100, 'исходный список не мутируется');
+  eq(PM.mergePositions(cur, PM.positionsFromFeed(f.offers, {}), true).positions.length, 7, 'режим «заменить»');
+});
+await t('панель: окно «Импорт из XML-фида» (jsdom + имитация chrome.*)', async () => {
+  const html = fs.readFileSync(path.join(root, 'dashboard/index.html'), 'utf8').replace(/<script[^>]*><\/script>/g, '');
+  const dom = new JSDOM(html, { url: 'chrome-extension://x/dashboard/index.html', runScripts: 'outside-only', pretendToBeVisual: true });
+  const w = dom.window;
+  const store = { settings: {}, positions: PM.normalizePositions(PM.SAMPLE_POSITIONS), results: {}, run: { state: 'idle', queue: [] }, log: [] };
+  const asked = [];
+  w.chrome = {
+    runtime: { sendMessage: async () => ({ ok: true }) },
+    storage: {
+      local: {
+        get: async (k) => { const ks = Array.isArray(k) ? k : [k]; return Object.fromEntries(ks.filter((x) => x in store).map((x) => [x, JSON.parse(JSON.stringify(store[x]))])); },
+        set: async (o) => { Object.assign(store, JSON.parse(JSON.stringify(o))); }
+      },
+      onChanged: { addListener() {} }
+    },
+    permissions: { request: async (p) => { asked.push(...p.origins); return true; }, contains: async () => true }
+  };
+  w.fetch = async (url) => ({ ok: true, status: 200, arrayBuffer: async () => FEED_BYTES.buffer.slice(FEED_BYTES.byteOffset, FEED_BYTES.byteOffset + FEED_BYTES.length) });
+  w.TextDecoder = TextDecoder;
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function (v) { this.open = false; this.returnValue = v || ''; this.dispatchEvent(new w.Event('close')); };
+  w.confirm = () => true;
+  w.eval(fs.readFileSync(path.join(root, 'lib/core.js'), 'utf8'));
+  w.eval(fs.readFileSync(path.join(root, 'dashboard/dashboard.js'), 'utf8'));
+  const d = w.document, tick = () => new Promise((r) => setTimeout(r, 20));
+  await tick();
+  d.querySelector('#btnFeed').click(); await tick();
+  ok(d.querySelector('#feedDlg').open, 'окно открылось');
+  eq(d.querySelector('#feedUrl').value, 'https://sancomfgroup.ru/bitrix/catalog_export/cmfsn_2CFg.xml', 'ссылка по умолчанию');
+  ok(d.querySelector('#feedTpl').value.includes('{series}'), 'шаблоны по умолчанию');
+  ok(d.querySelector('#feedGo').disabled, 'до загрузки импорт недоступен');
+  d.querySelector('#feedLoad').click(); await tick(); await tick();
+  eq(asked, ['https://sancomfgroup.ru/*'], 'доступ запрошен только к сайту фида');
+  ok(/товаров <b>7<\/b>/.test(d.querySelector('#feedInfo').innerHTML), d.querySelector('#feedInfo').textContent);
+  eq(d.querySelectorAll('#feedPreview tbody tr').length, 7);
+  const f = d.querySelector('#feedFilter'); f.value = 'электрические -ЭК'; f.dispatchEvent(new w.Event('input'));
+  eq(d.querySelectorAll('#feedPreview tbody tr').length, 4, 'предпросмотр следует за фильтром');
+  ok(/обновится цен 1/.test(d.querySelector('#feedInfo').textContent), d.querySelector('#feedInfo').textContent);
+  d.querySelector('#feedDlg').close('ok'); await tick();
+  eq(store.feedCfg.filter, 'электрические -ЭК', 'настройки окна запомнены');
+  ok(!d.querySelector('#dirty').hidden, 'изменения ждут «Сохранить»');
+  d.querySelector('#btnSavePos').click(); await tick();
+  eq(store.positions.length, 4);
+  eq(store.positions.find((p) => p.article === '018443').ourPrice, 32000);
+  eq(store.positions.find((p) => p.article === '018191').links.length, 3);
+  w.close();   // у панели setInterval — иначе node не завершится
+});
+
 /* ============================ манифест и файлы ============================ */
 console.log('\nmanifest');
 await t('манифест MV3: файлы на месте, без широких host_permissions', () => {

@@ -49,6 +49,7 @@
     <div class="toolbar">
       <button id="btnAddPos" class="btn">+ Позиция</button>
       <button id="btnImport" class="btn">Импорт из Excel / CSV…</button>
+      <button id="btnFeed" class="btn">Импорт из XML-фида…</button>
       <button id="btnExportPos" class="btn">⬇ Выгрузить позиции</button>
       <button id="btnSample" class="btn ghost" title="Добавить 4 позиции из отчёта с найденными ссылками">Загрузить пример (4 позиции Comfysan)</button>
       <span class="grow"></span>
@@ -116,6 +117,38 @@
       <label class="chk"><input type="checkbox" id="importReplace"> заменить текущий список</label>
       <button value="cancel" class="btn">Отмена</button>
       <button id="importGo" value="ok" class="btn primary">Импортировать</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="feedDlg">
+  <form method="dialog" class="dlg feed">
+    <h3>Импорт позиций из XML-фида каталога</h3>
+    <p class="hint">YML (Яндекс.Маркет, выгрузка Bitrix <code>/bitrix/catalog_export/…xml</code>) или Google Merchant.
+      Из фида берутся <b>наименование, артикул и наша цена</b>, ссылки на конкурентов строятся по шаблонам ниже.
+      Позиции с тем же артикулом обновляются (цена из фида), ручные ссылки сохраняются.</p>
+    <div class="row">
+      <input id="feedUrl" type="url" class="grow" placeholder="https://…/catalog_export/….xml">
+      <button type="button" id="feedLoad" class="btn primary">Загрузить по ссылке</button>
+      <label class="btn file">Файл…<input type="file" id="feedFile" accept=".xml,.yml,text/xml,application/xml" hidden></label>
+    </div>
+    <div class="grid">
+      <label>Фильтр (слова через пробел, <code>-слово</code> — исключить)<input id="feedFilter" placeholder="полотенцесушитель электрический -ЭК"></label>
+      <label>Бренд для {brand}/{series}<input id="feedBrand" placeholder="Comfysan"></label>
+      <label>Наша цена из<select id="feedPrice"><option value="price">price (текущая)</option><option value="oldprice">oldprice (если есть)</option><option value="max">большая из двух</option></select></label>
+      <label>Не больше позиций (0 — все)<input id="feedLimit" type="number" min="0" step="1"></label>
+      <label class="chk"><input type="checkbox" id="feedAvail"> только «в наличии» (available=true)</label>
+    </div>
+    <label class="tpl">Шаблоны ссылок конкурентов — по одному на строку: <code>URL | якорь</code>.
+      Подстановки <code>{article}</code> <code>{series}</code> <code>{brand}</code> <code>{name}</code>; строка с <code>#</code> — отключена.
+      <textarea id="feedTpl" rows="4" spellcheck="false"></textarea></label>
+    <div id="feedInfo" class="banner info">Загрузите фид по ссылке или выберите файл.</div>
+    <div id="feedPreview" class="feed-preview"></div>
+    <div class="toolbar">
+      <label class="chk"><input type="checkbox" id="feedReplace"> заменить текущий список</label>
+      <span class="grow"></span>
+      <button value="cancel" class="btn">Отмена</button>
+      <button id="feedGo" value="ok" class="btn primary" disabled>Добавить позиции</button>
     </div>
   </form>
 </dialog>

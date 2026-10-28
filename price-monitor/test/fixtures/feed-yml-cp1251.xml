@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<!DOCTYPE yml_catalog SYSTEM "shops.dtd">
+<yml_catalog date="2026-10-28 10:00">
+<shop>
+<name>SanComfGroup</name>
+<company>ООО &quot;СанКомф&quot;</company>
+<url>https://sancomfgroup.ru</url>
+<currencies><currency id="RUB" rate="1"/></currencies>
+<categories>
+<category id="10">Полотенцесушители</category>
+<category id="11" parentId="10">Электрические</category>
+<category id="12" parentId="10">Водяные</category>
+<category id="20">Аксессуары</category>
+</categories>
+<offers>
+<offer id="5001" available="true">
+<url>https://sancomfgroup.ru/catalog/elektricheskie/alto-k-ec-3-120-12-gunmetal/</url>
+<price>27900</price>
+<currencyId>RUB</currencyId>
+<categoryId>11</categoryId>
+<name>Полотенцесушитель электрический Comfysan Alto-K EC-3 120/12, оружейная сталь, гальваника</name>
+<vendor>Comfysan</vendor>
+<vendorCode>018160</vendorCode>
+</offer>
+<offer id="5002" available="true">
+<url>https://sancomfgroup.ru/catalog/elektricheskie/alto-k-ec-4-120-18-gunmetal/</url>
+<price>34100</price>
+<currencyId>RUB</currencyId>
+<categoryId>11</categoryId>
+<name><![CDATA[Полотенцесушитель электрический Comfysan Alto-K EC-4 120/18, оружейная сталь, гальваника]]></name>
+<vendor>Comfysan</vendor>
+<param name="Артикул">018184</param>
+<param name="Цвет">оружейная сталь</param>
+</offer>
+<offer id="5003" available="true">
+<url>https://sancomfgroup.ru/catalog/elektricheskie/alto-k-ec-4-120-18-gold/</url>
+<price>32000</price>
+<oldprice>34100</oldprice>
+<currencyId>RUB</currencyId>
+<categoryId>11</categoryId>
+<name>Полотенцесушитель электрический Comfysan Alto-K EC-4 120/18, золото, гальваника 018443</name>
+<vendor>Comfysan</vendor>
+</offer>
+<offer id="5004" available="false">
+<url>https://sancomfgroup.ru/catalog/elektricheskie/stella-ec-6-70-40/</url>
+<price>22 500.00</price>
+<currencyId>RUB</currencyId>
+<categoryId>11</categoryId>
+<name>Полотенцесушитель электрический Comfysan Стелла EC-6 70/40, оружейная сталь, гальваника</name>
+<vendor>Comfysan</vendor>
+<vendorCode>018191</vendorCode>
+</offer>
+<offer id="5005" available="true">
+<url>https://sancomfgroup.ru/catalog/vodyanye/lesenka-klassik-50-80/?a=1&amp;b=2</url>
+<price>9900</price>
+<currencyId>RUB</currencyId>
+<categoryId>12</categoryId>
+<name>Полотенцесушитель водяной Comfysan &quot;Лесенка&quot; П6 50x80, белый</name>
+<vendor>Comfysan</vendor>
+<vendorCode>017001</vendorCode>
+</offer>
+<offer id="5006" available="true">
+<url>https://sancomfgroup.ru/catalog/elektricheskie/alto-ek-3-powder/</url>
+<price>19900</price>
+<currencyId>RUB</currencyId>
+<categoryId>11</categoryId>
+<name>Полотенцесушитель электрический Comfysan Alto ЭК-3 120/12, чёрный матовый</name>
+<vendor>Comfysan</vendor>
+<vendorCode>018627</vendorCode>
+</offer>
+<offer id="6001" available="true">
+<url>https://sancomfgroup.ru/catalog/aksessuary/kryuchok/</url>
+<price>990</price>
+<currencyId>RUB</currencyId>
+<categoryId>20</categoryId>
+<name>Крючок настенный</name>
+</offer>
+</offers>
+</shop>
+</yml_catalog>
